@@ -1,0 +1,26 @@
+# IBIT Arbitrage Simulator Configuration
+etf:
+  ticker: "IBIT"
+  creation_unit_shares: 40000
+
+bitcoin:
+  ticker: "BTC-USD"
+
+costs:
+  creation_redemption_fee_usd: 750       # per creation unit
+  etf_commission_per_share: 0.005        # IBKR rate
+  btc_execution_bps: 2                   # institutional rate
+  market_impact_bps: 1                   # ~0.01% each leg
+  btc_spot_spread_bps: 2                 # institutional
+
+signals:
+  min_spread_after_costs_bps: 10         # minimum net spread to trigger
+
+ibkr:
+  host: "127.0.0.1"
+  port: 7497      # paper trading (4001 for live)
+  client_id: 1
+
+analysis:
+  start_date: "2024-01-11"              # IBIT launch date
+  end_date: null                         # null = today

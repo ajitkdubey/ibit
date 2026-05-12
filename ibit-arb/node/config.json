@@ -1,0 +1,35 @@
+{
+  "etf": {
+    "ticker": "IBIT",
+    "name": "iShares Bitcoin Trust ETF",
+    "creationUnitShares": 40000,
+    "btcPerShare": 0.000569,
+    "sponsor": "BlackRock / iShares",
+    "custodian": "Coinbase Custody",
+    "managementFeeBps": 25
+  },
+  "bitcoin": {
+    "ticker": "BTC-USD"
+  },
+  "costs": {
+    "creationRedemptionFeeUsd": 750,
+    "_creationRedemptionFeeNote": "BlackRock IBIT AP Agreement Exhibit — $750 per order (publicly cited in industry sources).",
+    "etfCommissionPerShare": 0.005,
+    "btcExecutionBps": 2,
+    "marketImpactBps": 1,
+    "btcSpotSpreadBps": 2
+  },
+  "signals": {
+    "minSpreadAfterCostsBps": 10
+  },
+  "blackrock": {
+    "holdingsUrl": "https://www.ishares.com/us/products/333011/fund.ajax?tab=holdings&fileType=json"
+  },
+  "analysis": {
+    "startDate": "2024-01-11"
+  },
+  "coinbase": {
+    "wsUrl": "wss://ws-feed.exchange.coinbase.com",
+    "restUrl": "https://api.exchange.coinbase.com/products/BTC-USD/ticker"
+  }
+}
