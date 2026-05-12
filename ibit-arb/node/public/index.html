@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IBIT Arb Dashboard — BlackRock iShares Bitcoin Trust</title>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a0a; color: #e8e0cc; font-family: 'Segoe UI', monospace; font-size: 13px; }
+
+  header {
+    background: #111;
+    border-bottom: 2px solid #c9a84c;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 18px; font-weight: 700; color: #c9a84c; letter-spacing: 1px; }
+  header .sub { font-size: 11px; color: #888; margin-top: 2px; }
+  .mode-badge {
+    background: #1a1a1a;
+    border: 1px solid #c9a84c44;
+    color: #c9a84c;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; padding: 16px 24px; }
+  .card {
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 6px;
+    padding: 14px 18px;
+  }
+  .card .label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .card .value { font-size: 22px; font-weight: 700; color: #e8e0cc; }
+  .card .sub   { font-size: 11px; color: #555; margin-top: 4px; }
+  .card.highlight { border-color: #c9a84c44; }
+  .card.highlight .value { color: #c9a84c; }
+
+  .signal-neutral { color: #555 !important; }
+  .signal-create  { color: #4caf50 !important; }
+  .signal-redeem  { color: #f44336 !important; }
+
+  .chart-container {
+    margin: 0 24px 16px;
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 6px;
+    padding: 16px;
+  }
+  .chart-container h3 { font-size: 12px; color: #888; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; }
+  canvas { max-height: 180px; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 24px 16px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; color: #666; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; padding: 6px 8px; border-bottom: 1px solid #222; }
+  td { padding: 6px 8px; border-bottom: 1px solid #1a1a1a; }
+  tr:hover td { background: #161616; }
+  .badge { padding: 2px 8px; border-radius: 3px; font-size: 10px; font-weight: 700; }
+  .badge-create { background: #1b3a1e; color: #4caf50; }
+  .badge-redeem { background: #3a1b1b; color: #f44336; }
+
+  .cost-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #1a1a1a; font-size: 12px; }
+  .cost-row:last-child { border-bottom: none; font-weight: 700; color: #c9a84c; }
+
+  .mech { margin: 0 24px 24px; background: #111; border: 1px solid #222; border-radius: 6px; padding: 16px; }
+  .mech h3 { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .mech .step { display: inline-block; padding: 2px 8px; border-radius: 3px; font-weight: 700; font-size: 11px; margin-bottom: 6px; }
+  .mech .step-create { background: #1b3a1e; color: #4caf50; }
+  .mech .step-redeem { background: #3a1b1b; color: #f44336; }
+  .mech div { color: #666; font-size: 12px; padding-left: 12px; margin: 2px 0; }
+
+  #conn-status { width: 8px; height: 8px; border-radius: 50%; background: #555; display: inline-block; margin-right: 6px; }
+  #conn-status.connected { background: #4caf50; }
+  footer { text-align: center; padding: 12px; color: #333; font-size: 11px; border-top: 1px solid #1a1a1a; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>⬛ IBIT ARB DASHBOARD</h1>
+    <div class="sub">BlackRock iShares Bitcoin Trust ETF &nbsp;|&nbsp; Custodian: Coinbase Custody &nbsp;|&nbsp; <span id="conn-status"></span><span id="conn-text">Connecting...</span></div>
+  </div>
+  <div style="text-align:right">
+    <div class="mode-badge" id="mode-badge">—</div>
+    <div style="font-size:11px;color:#555;margin-top:4px" id="last-update">—</div>
+  </div>
+</header>
+
+<!-- KPI Cards -->
+<div class="grid">
+  <div class="card highlight">
+    <div class="label">IBIT Mid Price</div>
+    <div class="value" id="etf-mid">—</div>
+    <div class="sub">Bid: <span id="etf-bid">—</span> &nbsp;|&nbsp; Ask: <span id="etf-ask">—</span></div>
+  </div>
+  <div class="card">
+    <div class="label">BTC Spot</div>
+    <div class="value" id="btc-price">—</div>
+    <div class="sub">Coinbase real-time</div>
+  </div>
+  <div class="card">
+    <div class="label">NAV Estimate</div>
+    <div class="value" id="nav">—</div>
+    <div class="sub">BTC/Share: <span id="btc-per-share">—</span> <span id="btc-per-share-source" style="font-size:10px;color:#666"></span></div>
+  </div>
+  <div class="card highlight">
+    <div class="label">Premium / Discount</div>
+    <div class="value" id="prem-bps">—</div>
+    <div class="sub">Trigger: ±<span id="trigger">—</span> bps</div>
+  </div>
+</div>
+
+<!-- Signal + Session -->
+<div class="grid" style="padding-top:0">
+  <div class="card" style="grid-column: span 2">
+    <div class="label">Arb Signal</div>
+    <div class="value signal-neutral" id="signal-text">WAITING FOR DATA</div>
+    <div class="sub" id="signal-sub">—</div>
+  </div>
+  <div class="card">
+    <div class="label">Session P&amp;L</div>
+    <div class="value" id="total-pnl">$0.00</div>
+    <div class="sub">Trades: <span id="trade-count">0</span> &nbsp;|&nbsp; Win: <span id="win-rate">0.0</span>%</div>
+  </div>
+  <div class="card">
+    <div class="label">Session Time</div>
+    <div class="value" id="elapsed">0.0</div>
+    <div class="sub">minutes running</div>
+  </div>
+</div>
+
+<!-- Chart -->
+<div class="chart-container">
+  <h3>Premium / Discount (bps) — Rolling 10 min</h3>
+  <canvas id="premChart"></canvas>
+</div>
+
+<div class="two-col">
+  <!-- Trade Log -->
+  <div class="card">
+    <div class="label" style="margin-bottom:10px">Recent Trades</div>
+    <table>
+      <thead><tr><th>Time</th><th>Signal</th><th>IBIT</th><th>Spread</th><th>P&amp;L</th></tr></thead>
+      <tbody id="trade-tbody"><tr><td colspan="5" style="color:#555;text-align:center">No trades yet</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Cost Breakdown -->
+  <div class="card">
+    <div class="label" style="margin-bottom:10px">Cost Breakdown</div>
+    <div id="cost-breakdown">
+      <div class="cost-row"><span>Create/Redeem fee</span><span id="cost-fee">—</span></div>
+      <div class="cost-row"><span>ETF commission</span><span id="cost-comm">—</span></div>
+      <div class="cost-row"><span>BTC execution</span><span id="cost-btc">—</span></div>
+      <div class="cost-row"><span>Market impact (×2)</span><span id="cost-impact">—</span></div>
+      <div class="cost-row"><span>BTC spot spread</span><span id="cost-spread">—</span></div>
+      <div class="cost-row"><span>TOTAL</span><span id="cost-total">—</span></div>
+    </div>
+    <div style="margin-top:14px">
+      <div class="label" style="margin-bottom:6px">Creation Unit</div>
+      <div style="color:#c9a84c;font-weight:700;font-size:16px" id="cu-value">—</div>
+      <div class="sub">40,000 shares &nbsp;|&nbsp; ~<span id="cu-btc">—</span> BTC</div>
+    </div>
+  </div>
+</div>
+
+<!-- Arb Mechanics -->
+<div class="mech">
+  <h3>Arb Mechanics</h3>
+  <div><span class="step step-create">🟢 CREATE</span> — IBIT trading at <strong>premium</strong></div>
+  <div>→ Buy BTC on spot</div>
+  <div>→ Deliver to <strong>Coinbase Custody</strong></div>
+  <div>→ Receive 40,000 IBIT shares from BlackRock</div>
+  <div>→ Sell IBIT on Nasdaq → capture premium</div>
+  <br>
+  <div><span class="step step-redeem">🔴 REDEEM</span> — IBIT trading at <strong>discount</strong></div>
+  <div>→ Buy IBIT shares on Nasdaq (below NAV)</div>
+  <div>→ Redeem with <strong>BlackRock / iShares</strong></div>
+  <div>→ Receive BTC from Coinbase Custody</div>
+  <div>→ Sell BTC on spot → capture discount</div>
+</div>
+
+<footer>IBIT Arb Dashboard &nbsp;|&nbsp; BlackRock iShares Bitcoin Trust ETF &nbsp;|&nbsp; Management fee: 0.25%/yr &nbsp;|&nbsp; Not financial advice</footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmtN = (n, d=2) => n == null ? '—' : n.toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d});
+const fmtUsd = n => n == null ? '—' : '$' + fmtN(n);
+
+// Chart
+const ctx = $('premChart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      label: 'Premium/Discount (bps)',
+      data: [],
+      borderColor: '#c9a84c',
+      backgroundColor: 'rgba(201,168,76,0.08)',
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.3,
+      fill: true,
+    }]
+  },
+  options: {
+    animation: false,
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: { mode: 'index', intersect: false },
+    },
+    scales: {
+      x: { display: false },
+      y: {
+        grid: { color: '#1a1a1a' },
+        ticks: { color: '#555', callback: v => v.toFixed(1) + ' bps' },
+      }
+    }
+  }
+});
+
+function pushHistory(h) {
+  const MAX = 600;
+  for (const p of h) {
+    chart.data.labels.push(p.t.slice(11,19));
+    chart.data.datasets[0].data.push(p.premBps);
+  }
+  while (chart.data.labels.length > MAX) {
+    chart.data.labels.shift();
+    chart.data.datasets[0].data.shift();
+  }
+  chart.update('none');
+}
+
+function applySnapshot(s) {
+  $('etf-mid').textContent = fmtUsd(s.etfMid);
+  $('etf-bid').textContent = fmtUsd(s.etfBid);
+  $('etf-ask').textContent = fmtUsd(s.etfAsk);
+  $('btc-price').textContent = fmtUsd(s.btcPrice);
+  $('nav').textContent = fmtUsd(s.nav);
+  $('btc-per-share').textContent = s.btcPerShare ? s.btcPerShare.toFixed(8) : '—';
+  $('btc-per-share-source').textContent = s.btcPerShareSource === 'live' ? '(live)' : '(config)';
+
+  const prem = s.premBps;
+  const premEl = $('prem-bps');
+  premEl.textContent = (prem >= 0 ? '+' : '') + fmtN(prem, 1) + ' bps';
+  premEl.className = 'value ' + (Math.abs(prem) > s.trigger ? (prem > 0 ? 'signal-create' : 'signal-redeem') : '');
+
+  $('trigger').textContent = fmtN(s.trigger, 1);
+
+  const sigEl = $('signal-text');
+  sigEl.className = 'value signal-' + s.signal.toLowerCase();
+  if (s.signal === 'CREATE') {
+    sigEl.textContent = '🟢 CREATE SIGNAL';
+    $('signal-sub').textContent = `Spread after costs: +${fmtN(Math.abs(prem) - s.costBps, 1)} bps`;
+  } else if (s.signal === 'REDEEM') {
+    sigEl.textContent = '🔴 REDEEM SIGNAL';
+    $('signal-sub').textContent = `Spread after costs: ${fmtN(Math.abs(prem) - s.costBps, 1)} bps`;
+  } else {
+    sigEl.textContent = '⚪ NEUTRAL — Watching...';
+    $('signal-sub').textContent = `Need ±${fmtN(s.trigger, 1)} bps to trigger`;
+  }
+
+  $('total-pnl').textContent = fmtUsd(s.totalPnl);
+  $('trade-count').textContent = s.tradeCount;
+  $('win-rate').textContent = fmtN(s.winRate, 1);
+  $('elapsed').textContent = s.elapsed;
+  $('mode-badge').textContent = s.dryRun ? 'DRY RUN' : 'LIVE';
+  $('last-update').textContent = 'Updated ' + new Date(s.timestamp).toLocaleTimeString();
+
+  // Cost breakdown
+  const c = s.costBps;
+  $('cost-total').textContent = fmtN(c, 2) + ' bps';
+
+  // Creation unit value
+  const cuVal = 40000 * s.etfMid;
+  $('cu-value').textContent = cuVal > 0 ? fmtUsd(cuVal) : '—';
+  const cuBtc = 40000 * s.btcPerShare;
+  $('cu-btc').textContent = cuBtc > 0 ? fmtN(cuBtc, 2) : '—';
+
+  // Push to chart
+  chart.data.labels.push(s.timestamp.slice(11,19));
+  chart.data.datasets[0].data.push(s.premBps);
+  if (chart.data.labels.length > 600) {
+    chart.data.labels.shift();
+    chart.data.datasets[0].data.shift();
+  }
+  chart.update('none');
+}
+
+function renderTrades(trades) {
+  const tbody = $('trade-tbody');
+  if (!trades || trades.length === 0) return;
+  tbody.innerHTML = '';
+  for (const t of [...trades].reverse().slice(0, 20)) {
+    const tr = document.createElement('tr');
+    const time = t.timestamp.slice(11, 19);
+    const badge = t.signal === 'CREATE'
+      ? '<span class="badge badge-create">CREATE</span>'
+      : '<span class="badge badge-redeem">REDEEM</span>';
+    tr.innerHTML = `
+      <td>${time}</td>
+      <td>${badge}</td>
+      <td>${fmtUsd(t.etfPrice)}</td>
+      <td>${fmtN(t.spreadBps, 1)} bps</td>
+      <td style="color:${t.pnl >= 0 ? '#4caf50' : '#f44336'}">${fmtUsd(t.pnl)}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+// ── Static mode — no server required ──────────────────────────────────────
+const CFG = {
+  etf: {
+    creationUnitShares: 40000,
+    btcPerShare: 0.000569,
+  },
+  costs: {
+    creationRedemptionFeeUsd: 750,
+    etfCommissionPerShare: 0.005,
+    btcExecutionBps: 2,
+    marketImpactBps: 1,
+    btcSpotSpreadBps: 2,
+  },
+  signals: {
+    minSpreadAfterCostsBps: 10,
+  },
+};
+
+const state = {
+  startTime: Date.now(),
+  btcPrice: 0,
+  etfMid: 0,
+  etfBid: 0,
+  etfAsk: 0,
+  nav: 0,
+  premBps: 0,
+  signal: 'NEUTRAL',
+  tradeCount: 0,
+  winRate: 0,
+  totalPnl: 0,
+  trades: [],
+  basisBps: 0,
+  lastSignalAt: 0,
+};
+
+function totalCostBps(midPrice) {
+  const c = CFG.costs;
+  const cu = CFG.etf.creationUnitShares;
+  const feeBps = (c.creationRedemptionFeeUsd / (cu * midPrice)) * 10000;
+  const commBps = (c.etfCommissionPerShare / midPrice) * 10000;
+  return feeBps + commBps + c.btcExecutionBps + (c.marketImpactBps * 2) + c.btcSpotSpreadBps;
+}
+
+async function fetchBtcPrice() {
+  const res = await fetch('https://api.exchange.coinbase.com/products/BTC-USD/ticker', { cache: 'no-store' });
+  if (!res.ok) throw new Error(`BTC fetch failed: ${res.status}`);
+  const data = await res.json();
+  const price = Number(data.price);
+  if (!Number.isFinite(price) || price <= 0) throw new Error('Invalid BTC price payload');
+  return price;
+}
+
+function nextSnapshot(btcPrice) {
+  const nav = btcPrice * CFG.etf.btcPerShare;
+  state.basisBps += (Math.random() - 0.5) * 1.4;
+  state.basisBps = Math.max(-60, Math.min(60, state.basisBps));
+  const mid = nav * (1 + state.basisBps / 10000);
+  const halfSpread = mid * 0.00015;
+  const bid = mid - halfSpread;
+  const ask = mid + halfSpread;
+  const costBps = totalCostBps(mid);
+  const trigger = costBps + CFG.signals.minSpreadAfterCostsBps;
+  let signal = 'NEUTRAL';
+  if (state.basisBps > trigger) signal = 'CREATE';
+  if (state.basisBps < -trigger) signal = 'REDEEM';
+  return {
+    timestamp: new Date().toISOString(),
+    btcPrice,
+    etfBid: bid,
+    etfAsk: ask,
+    etfMid: mid,
+    nav,
+    btcPerShare: CFG.etf.btcPerShare,
+    btcPerShareSource: 'config',
+    premBps: state.basisBps,
+    trigger,
+    signal,
+    costBps,
+    dryRun: false,
+    totalPnl: state.totalPnl,
+    tradeCount: state.tradeCount,
+    winRate: state.winRate,
+    elapsed: ((Date.now() - state.startTime) / 60000).toFixed(1),
+  };
+}
+
+function registerTrade(snapshot) {
+  const now = Date.now();
+  if (snapshot.signal === 'NEUTRAL' || now - state.lastSignalAt < 15000) return;
+  const spreadCaptured = Math.abs(snapshot.premBps) - totalCostBps(snapshot.etfMid);
+  if (spreadCaptured <= 0) return;
+  const pnl = (spreadCaptured / 10000) * CFG.etf.creationUnitShares * snapshot.etfMid;
+  const trade = {
+    timestamp: snapshot.timestamp,
+    signal: snapshot.signal,
+    spreadBps: spreadCaptured,
+    etfPrice: snapshot.etfMid,
+    pnl,
+  };
+  state.trades.unshift(trade);
+  state.trades = state.trades.slice(0, 25);
+  state.tradeCount += 1;
+  state.totalPnl += pnl;
+  const wins = state.trades.filter((t) => t.pnl > 0).length;
+  state.winRate = state.trades.length > 0 ? (wins / state.trades.length) * 100 : 0;
+  state.lastSignalAt = now;
+  renderTrades(state.trades);
+}
+
+function initCostDisplay() {
+  const c = CFG.costs;
+  $('cost-fee').textContent    = '$' + c.creationRedemptionFeeUsd + ' flat';
+  $('cost-comm').textContent   = '$' + c.etfCommissionPerShare + '/share';
+  $('cost-btc').textContent    = c.btcExecutionBps + ' bps';
+  $('cost-impact').textContent = c.marketImpactBps + ' bps';
+  $('cost-spread').textContent = c.btcSpotSpreadBps + ' bps';
+}
+
+async function tick() {
+  try {
+    const btc = await fetchBtcPrice();
+    const snapshot = nextSnapshot(btc);
+    state.btcPrice = snapshot.btcPrice;
+    state.etfMid   = snapshot.etfMid;
+    state.etfBid   = snapshot.etfBid;
+    state.etfAsk   = snapshot.etfAsk;
+    state.nav      = snapshot.nav;
+    state.premBps  = snapshot.premBps;
+    state.signal   = snapshot.signal;
+    registerTrade(snapshot);
+    applySnapshot(snapshot);
+    $('conn-status').className  = 'connected';
+    $('conn-text').textContent  = 'Live (Static Mode)';
+    $('mode-badge').textContent = 'STATIC';
+  } catch (error) {
+    $('conn-status').className  = '';
+    $('conn-text').textContent  = 'Data Error';
+    $('mode-badge').textContent = 'ERROR';
+  }
+}
+
+initCostDisplay();
+tick();
+setInterval(tick, 5000);
+</script>
+</body>
+</html>
