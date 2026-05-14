@@ -173,6 +173,13 @@
   </div>
 </div>
 
+<div style="margin: 0 24px 16px;">
+  <div class="card">
+    <div class="label" style="margin-bottom:10px">Market Overview</div>
+    <div id="market-overview" style="color:#555;text-align:center">Loading...</div>
+  </div>
+</div>
+
 <!-- Arb Mechanics -->
 <div class="mech">
   <h3>Arb Mechanics</h3>
@@ -464,6 +471,45 @@ async function tick() {
 initCostDisplay();
 tick();
 setInterval(tick, 5000);
+
+async function loadMarketOverview() {
+  try {
+    const res = await fetch('http://20.106.161.185:8080/api/market-overview', {
+      // headers: { "X-API-Key": "your-secret" }  // uncomment if DASHBOARD_API_KEY is set
+    });
+    const json = await res.json();
+
+    const ibitEntries = Object.entries(json.market_data || {}).filter(([sym]) => sym.toUpperCase() === 'IBIT');
+    const rows = ibitEntries.length > 0
+      ? ibitEntries.map(([sym, d]) => {
+        const change = d.change_pct != null
+          ? `<span style="color:${d.change_pct >= 0 ? 'green' : 'red'}">${d.change_pct > 0 ? '+' : ''}${d.change_pct}%</span>`
+          : '—';
+        return `<tr>
+          <td><b>${sym}</b></td>
+          <td>$${d.last?.toLocaleString() ?? '—'}</td>
+          <td>${d.bid ? '$' + d.bid.toLocaleString() : '—'}</td>
+          <td>${d.ask ? '$' + d.ask.toLocaleString() : '—'}</td>
+          <td>${d.spread_bps ?? '—'} bps</td>
+          <td>${change}</td>
+        </tr>`;
+      }).join('')
+      : '<tr><td colspan="6" style="color:#555;text-align:center">No IBIT data</td></tr>';
+
+    $('market-overview').innerHTML = `
+      <table>
+        <thead><tr><th>Symbol</th><th>Last</th><th>Bid</th><th>Ask</th><th>Spread</th><th>Change</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <small style="display:block;margin-top:8px;color:#666">Updated: ${json.timestamp}</small>
+    `;
+  } catch (error) {
+    $('market-overview').innerHTML = '<div style="color:#f44336;text-align:center">Failed to load market overview</div>';
+  }
+}
+
+loadMarketOverview();
+setInterval(loadMarketOverview, 5000); // auto-refresh every 5s
 </script>
 </body>
 </html>
