@@ -474,7 +474,7 @@ setInterval(tick, 5000);
 
 async function loadMarketOverview() {
   try {
-    const res = await fetch('http://20.106.161.185:8080/api/market-overview', {
+    const res = await fetch('https://btctrader-api-68276-gqbkg8bucfbndjgn.z01.azurefd.net/api/market-overview', {
       // headers: { "X-API-Key": "your-secret" }  // uncomment if DASHBOARD_API_KEY is set
     });
     const json = await res.json();
